@@ -67,9 +67,9 @@ public class Program
 
         ITrigger merchantTrigger = TriggerBuilder.Create()
                                                  .WithIdentity("leaderboardtrigger", "leaderboardgroup")
-                                                 //.StartNow()
-                                                 //.WithCronSchedule("0 */5 * ? * *")
-                                                 .WithCronSchedule("0 0/1 * * * ?")
+                                                 .StartNow()
+                                                 .WithCronSchedule("0 */5 * ? * *")
+                                                 //.WithCronSchedule("0 0/1 * * * ?")
                                                  .Build();
 
         await scheduler.ScheduleJob(merchantJob, merchantTrigger);
