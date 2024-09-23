@@ -25,11 +25,11 @@ public class Config
     [JsonPropertyName("server")]
     public ulong Server { get; set; }
 
-    [JsonPropertyName("admin")]
-    public ulong Admin { get; set; }
-
     [JsonPropertyName("leaderboardchannel")]
     public ulong LeaderboardChannel { get; set; }
+
+    [JsonPropertyName("certifiedroleid")]
+    public ulong CertifiedRoleId { get; set; }
 
     [JsonPropertyName("dbserver")]
     public string DbServer { get; set; }

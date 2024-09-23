@@ -1,18 +1,13 @@
 ﻿using Discord;
 using Discord.Interactions;
 using Discord.WebSocket;
-using NoHesi.databasemodels;
 
 namespace NoHesi.Bot.SlashCommands;
 
-[DontAutoRegister]
+[RequireUserPermission(GuildPermission.Administrator)]
 [Group("link", "Links accounts to the discord account")]
 public class LinkModule : InteractionModuleBase<SocketInteractionContext<SocketSlashCommand>>
 {
-    private readonly NoHesiBotContext dbcontext;
-
-    public LinkModule(NoHesiBotContext dbcontext) => this.dbcontext = dbcontext;
-
     [SlashCommand("steam", "Links the steam account to the discord account")]
     public async Task LinkSteam([Summary("steam_id", "Your steam id")] string steamId)
     {

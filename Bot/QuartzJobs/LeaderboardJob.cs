@@ -1,6 +1,7 @@
 ﻿using System.Text.Json;
 using Discord;
 using Discord.WebSocket;
+using NoHesi.Bot.FileObjects;
 using NoHesi.Bot.FileObjects.NoHesi;
 using NoHesi.Bot.Shared;
 using NoHesi.databasemodels;
@@ -10,18 +11,6 @@ namespace NoHesi.Bot.QuartzJobs;
 
 public class LeaderboardJob(NoHesiBotContext dbcontext) : IJob
 {
-    private readonly Dictionary<int, ulong> scoreRoles = new()
-    {
-        { 10, 1284217204228886548 },
-        { 20, 1284219941838393477 },
-        { 30, 1284217482328018964 },
-        { 40, 1284219995970211871 },
-        { 60, 1284219327142170745 },
-        { 100, 1284220324178694184 },
-        { 150, 1284220398451294291 },
-        { 200, 1284220486573621269 },
-    };
-
     public async Task Execute(IJobExecutionContext context)
     {
         await LogService.Log(LogSeverity.Info, this.GetType().Name, "Executing Leaderboard Quartz job");
@@ -38,9 +27,14 @@ public class LeaderboardJob(NoHesiBotContext dbcontext) : IJob
 
         HttpClient client = new();
 
-        using HttpResponseMessage response = await client.GetAsync("https://www.nohesi.gg/api/leaderboard?page=1&pageSize=1000");
-        LeaderboardAll leaderboardAll = JsonSerializer.Deserialize<LeaderboardAll>(await response.Content.ReadAsStringAsync());
-        List<LeaderboardPlayer> players = leaderboardAll.Players;
+        List<LeaderboardPlayer> players = new();
+
+        for (int i = 1; i < 11; i++)
+        {
+            using HttpResponseMessage response = await client.GetAsync("https://www.nohesi.gg/api/leaderboard?page=" + i + "&pageSize=100");
+            LeaderboardAll leaderboardAll = JsonSerializer.Deserialize<LeaderboardAll>(await response.Content.ReadAsStringAsync());
+            players.AddRange(leaderboardAll.Players);
+        }
 
         List<SteamLink> steamLinks = dbcontext.SteamLinks.ToList();
 
@@ -48,14 +42,24 @@ public class LeaderboardJob(NoHesiBotContext dbcontext) : IJob
 
         int certifiedScore = players[499].Score;
 
-        for (int i = 0; i < 20 && i < discordPlayers.Count; i++)
+        int localRanking = 1;
+
+        for (int i = 0; i < discordPlayers.Count; i++)
         {
             ulong discordId = ulong.Parse(steamLinks.First(x => x.SteamId == discordPlayers[i].SteamId).DiscordId);
             SocketGuildUser discordUser = Program.Guild.GetUser(discordId);
+
+            if (discordUser is null)
+            {
+                continue;
+            }
+
             int position = players.IndexOf(discordPlayers[i]) + 1;
 
             embed.Description +=
-                $"{i}. {discordUser.Mention} {discordPlayers[i].Score.ToString("N").Replace(".00", "").Replace(",000", "")} [#{position}]";
+                $"{localRanking}. {discordUser.Mention} {discordPlayers[i].Score.ToString("N").Replace(".00", "").Replace(",000", "")} [#{position}]";
+
+            localRanking++;
 
             if (discordPlayers[i].Score >= certifiedScore)
             {
@@ -64,43 +68,23 @@ public class LeaderboardJob(NoHesiBotContext dbcontext) : IJob
 
             embed.Description += "\n";
 
-            ulong roleId = this.GetScoreRole(discordPlayers[i].Score);
+            bool userHasRole = discordUser.Roles.Any(x => x.Id == Config.Default.CertifiedRoleId);
 
-            if (roleId != 0)
+            if (position <= 500 && !userHasRole)
             {
-                bool userHasRole = discordUser.Roles.Any(x => x.Id == roleId);
-
-                if (!userHasRole)
+                try
                 {
-                    List<SocketRole> assignedRoles = discordUser.Roles.Where(x => this.scoreRoles.Values.Contains(x.Id)).ToList();
-
-                    bool hasNewRole = false;
-
-                    foreach (SocketRole roleToDelete in assignedRoles)
-                    {
-                        if (roleToDelete.Id != roleId)
-                        {
-                            await discordUser.RemoveRoleAsync(roleToDelete.Id);
-                        }
-                        else
-                        {
-                            hasNewRole = true;
-                        }
-                    }
-
-                    if (!hasNewRole)
-                    {
-                        try
-                        {
-                            SocketRole role = Program.Guild.GetRole(roleId);
-                            await discordUser.AddRoleAsync(role, new RequestOptions());
-                        }
-                        catch (Exception e)
-                        {
-                            await LogService.Log(LogSeverity.Error, this.GetType().Name, "Ex: " + e);
-                        }
-                    }
+                    SocketRole role = Program.Guild.GetRole(Config.Default.CertifiedRoleId);
+                    await discordUser.AddRoleAsync(role, new RequestOptions());
                 }
+                catch (Exception e)
+                {
+                    await LogService.Log(LogSeverity.Error, this.GetType().Name, "Ex: " + e);
+                }
+            }
+            else if (position > 500 && userHasRole)
+            {
+                await discordUser.RemoveRoleAsync(Config.Default.CertifiedRoleId);
             }
         }
 
@@ -114,23 +98,5 @@ public class LeaderboardJob(NoHesiBotContext dbcontext) : IJob
         embed.Footer = footer;
 
         await textChannel.ModifyMessageAsync(messageId: message.Id, func => func.Embed = embed.Build());
-    }
-
-    private ulong GetScoreRole(int score)
-    {
-        int millions = score / 1000000;
-
-        switch (millions)
-        {
-            case < 10:             return 0;
-            case >= 10 and < 20:   return this.scoreRoles[10];
-            case >= 20 and < 30:   return this.scoreRoles[20];
-            case >= 30 and < 40:   return this.scoreRoles[30];
-            case >= 40 and < 60:   return this.scoreRoles[40];
-            case >= 60 and < 100:  return this.scoreRoles[60];
-            case >= 100 and < 150: return this.scoreRoles[100];
-            case >= 150 and < 200: return this.scoreRoles[150];
-            case >= 200:           return this.scoreRoles[200];
-        }
     }
 }
